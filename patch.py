@@ -4,6 +4,7 @@ import sys
 import shutil
 import filecmp
 import subprocess
+import zlib
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 SEVENZIP_EXE = os.path.join(SCRIPT_DIR, '7zip', 'x64', '7za.exe')
@@ -13,19 +14,34 @@ VERBOSITY_LEVEL = 0
 
 def create_patch(oldDir, newDir, outDir):
     patchDir = os.path.join(outDir, 'patch_temp')
-    if validate_environment(patchDir):
+    if not os.path.exists(patchDir):
+        os.mkdir(patchDir)
+    elif not is_empty_directory(patchDir):
+        print 'patch_temp directory is not empty! Aborting.'
+        return False
+    
+    if validate_environment():
         walk_old_dir(oldDir, newDir, patchDir)
         walk_new_dir(oldDir, newDir, patchDir)
         zip_directory(patchDir, patchDir + '.7z')
 
 
-def apply_patch(patchPath, targetDir):
-    patchDir = os.path.join( os.path.dirname(patchPath), 'patch_temp')
-    if validate_environment(patchDir):
-        unzip_directory(patchPath, patchDir)
+def apply_patch(patchFilePath, targetDir):
+    baseDir = os.path.dirname(patchFilePath)
+    patchDir = os.path.join(baseDir, 'patch_temp')
+    if validate_environment():
+        unzip_directory(patchFilePath, os.path.dirname(patchDir))
         index = read_index(patchDir)
+        for (operation, path, checksumOld, checksumNew) in index:
+            if (operation != 'A'):
+                validate_checksum(os.path.join(targetDir, path), checksumOld)
         for (operation, path) in index:
             apply_file_operation(operation, path, patchDir, targetDir)
+        for (operation, path, checksumOld, checksumNew) in index:
+            if (operation != 'D'):
+                validate_checksum(os.path.join(targetDir, path), checksumNew)
+
+    shutil.rmtree(patchDir)
 
 
 def apply_file_operation(operation, relPath, patchDir, targetDir):
@@ -61,7 +77,9 @@ def walk_old_dir(oldDir, newDir, patchDir):
             if not filecmp.cmp(oldPath, newPath):
                 mkdir_if_not_exists(os.path.dirname(patchPath))
                 bsdiff(oldPath, newPath, patchPath)
-                add_to_index('M', relPath, indexPath)
+                chkOld = checksum(oldPath)
+                chkNew = checksum(newPath)
+                add_to_index('M', relPath, indexPath, chkOld, chkNew)
                 continue
 
 
@@ -90,8 +108,8 @@ def add_file(srcPath, dstPath):
         os.makedirs(dstDir)
     os.rename(srcPath, dstPath)
 
-def modify_file(srcPath, patchFile, dstPath):
-    bspatch(srcPath, dstPath, patchFile)
+def modify_file(filePath, patchFile):
+    bspatch(filePath, filePath, patchFile)
 
 def delete_file(path):
     os.remove(path)
@@ -106,8 +124,8 @@ def bspatch(oldFile, newFile, patchFile):
     subprocess.call([BSPATCH_EXE, oldFile, newFile, patchFile])
 
 
-def add_to_index(operation, path, indexPath):
-    line = operation + ' ' + path
+def add_to_index(operation, path, indexPath, checksumOld=0, checksumNew=0):
+    line = operation + ' ' + str(checksumOld) + ' ' + str(checksumNew) + ' ' + path
     print_verbose(1, line)
     with open(indexPath, 'a') as indexFile:
         indexFile.write(line + '\n')
@@ -117,9 +135,12 @@ def read_index(patchDir):
     with open(indexPath, 'r') as indexFile:
         result = []
         for line in indexFile.readlines():
-            operation = line[0:1]
-            path = line[2:]
-            result.append( (operation, path) )
+            parts = line.split(4)
+            operation = parts[0]
+            checksumOld = int(parts[1])
+            checksumNew = int(parts[2])
+            path = parts[3]
+            result.append( (operation, path, checksumOld, checksumNew) )
     return result
 
 
@@ -129,10 +150,15 @@ def zip_directory(directory, zipPath):
     
 def unzip_directory(zipPath, directory):
     global SEVENZIP_EXE
-    subprocess.call([SEVENZIP_EXE, 'x', zipPath, '-o', directory])
+    subprocess.call([SEVENZIP_EXE, 'x', zipPath, '-o' + directory])
 
 
-def validate_environment(patchDir):
+def checksum(path):
+    with open(path, 'r') as f:
+        return zlib.adler32(f.read())
+
+
+def validate_environment():
     global BSDIFF_EXE
     global BSPATCH_EXE
     global SEVENZIP_EXE
@@ -146,11 +172,6 @@ def validate_environment(patchDir):
         print "Couldn't find 7zip"
         return False
     
-    if not os.path.exists(patchDir):
-        os.mkdir(patchDir)
-    elif not is_empty_directory(patchDir):
-        print 'patch_temp directory is not empty! Aborting.'
-        return False
     return True
 
 
@@ -173,12 +194,14 @@ def print_verbose(verbosity, msg):
 
 
 def parseExtraArgs(i):
-    global verbosityLevel
+    global VERBOSITY_LEVEL
     if i < len(sys.argv):
-        if sys.argv[i] == '-v':
+        if sys.argv[i] == '-v':            
             VERBOSITY_LEVEL = 1
+            print 'Verbosity Level ' + str(VERBOSITY_LEVEL)
         elif sys.argv[i] == '-vv':
             VERBOSITY_LEVEL = 2
+            print 'Verbosity Level ' + str(VERBOSITY_LEVEL)
         else:
             print 'unrecognized argument ' + sys.argv[i]
             usage()
