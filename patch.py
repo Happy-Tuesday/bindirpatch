@@ -164,12 +164,15 @@ def validate_environment():
     global SEVENZIP_EXE
     if not os.path.exists(BSDIFF_EXE):
         print "Couldn't find bsdiff"
+        print "Please download from http://sites.inka.de/tesla/download/bsdiff4.3-win32.zip"
         return False
     if not os.path.exists(BSPATCH_EXE):
         print "Couldn't find bspatch"
+        print "Please download from http://sites.inka.de/tesla/download/bsdiff4.3-win32.zip"
         return False
     if not os.path.exists(SEVENZIP_EXE):
         print "Couldn't find 7zip"
+        print "Please download from http://www.7-zip.org/a/7z1507-extra.7z"
         return False
     
     return True
