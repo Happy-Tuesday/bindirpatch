@@ -72,27 +72,34 @@ def walk_old_dir(oldDir, newDir, patchDir):
     print 'Checking Old Files in ' + oldDir
     indexPath = os.path.join(patchDir, 'index')
     for (relPath, oldPath, newPath, patchPath) in walk_dir(oldDir, oldDir, newDir, patchDir):
-        print_verbose(2, '    ' + oldPath)
+        visit_old_file(relPath, oldPath, newPath, patchPath, indexPath)
 
-        if not os.path.exists(newPath):
-            add_to_index('D', relPath, indexPath)
-            continue
 
-        if not filecmp.cmp(oldPath, newPath):
-            mkdir_if_not_exists(os.path.dirname(patchPath))
-            bsdiff(oldPath, newPath, patchPath)
-            chkOld = checksum(oldPath)
-            chkNew = checksum(newPath)
-            add_to_index('M', relPath, indexPath, chkOld, chkNew)
-            continue
+def visit_old_file(relPath, oldPath, newPath, patchPath, indexPath):
+    print_verbose(2, '    ' + oldPath)
 
+    if not os.path.exists(newPath):
+        add_to_index('D', relPath, indexPath)
+        return
+
+    if not filecmp.cmp(oldPath, newPath):
+        mkdir_if_not_exists(os.path.dirname(patchPath))
+        bsdiff(oldPath, newPath, patchPath)
+        chkOld = checksum(oldPath)
+        chkNew = checksum(newPath)
+        add_to_index('M', relPath, indexPath, chkOld, chkNew)
+        return
+    
 
 def walk_new_dir(oldDir, newDir, patchDir):
     print 'Checking for new files...'
     indexPath = os.path.join(patchDir, 'index')
     for (relPath, oldPath, newPath, patchPath) in walk_dir(newDir, oldDir, newDir, patchDir):
-        print_verbose(2, '    ' + relPath)
+        visit_new_file(relPath, oldPath, newPath, patchPath, indexPath)
 
+
+def visit_new_file(relPath, oldPath, newPath, patchPath, indexPath):
+        print_verbose(2, '    ' + relPath)
         if not os.path.exists(oldPath):
             targetDir = os.path.dirname(patchPath)
             mkdir_if_not_exists(targetDir)
