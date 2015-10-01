@@ -34,12 +34,12 @@ def apply_patch(patchFilePath, targetDir):
         index = read_index(patchDir)
         for (operation, path, checksumOld, checksumNew) in index:
             if (operation != 'A'):
-                validate_checksum(os.path.join(targetDir, path), checksumOld)
+                validate_checksum_pre(os.path.join(targetDir, path), checksumOld)
         for (operation, path) in index:
             apply_file_operation(operation, path, patchDir, targetDir)
         for (operation, path, checksumOld, checksumNew) in index:
             if (operation != 'D'):
-                validate_checksum(os.path.join(targetDir, path), checksumNew)
+                validate_checksum_post(os.path.join(targetDir, path), checksumNew)
 
     shutil.rmtree(patchDir)
 
@@ -56,50 +56,48 @@ def apply_file_operation(operation, relPath, patchDir, targetDir):
         delete_file(dstPath)
 
 
+def walk_dir(rootPath, oldDir, newDir, patchDir):
+    for (dirpath, dirnames, filenames) in os.walk(rootPath):
+        relDir = os.path.relpath(dirpath, rootPath)
+        for filename in filenames:
+            relPath = os.path.join(relDir, filename)
+            oldPath = os.path.join(oldDir, relPath)
+            newPath = os.path.join(newDir, relPath)
+            patchPath = os.path.join(patchDir, 'files', relPath)
+            yield (relPath, oldPath, newPath, patchPath)
+
 
 def walk_old_dir(oldDir, newDir, patchDir):
     print ''
     print 'Checking Old Files in ' + oldDir
     indexPath = os.path.join(patchDir, 'index')
-    for (dirpath, dirnames, filenames) in os.walk(oldDir):
-        relDir = os.path.relpath(dirpath, oldDir)
-        for filename in filenames:
-            relPath = os.path.join(relDir, filename)
-            oldPath = os.path.join(oldDir, relPath)
-            newPath = os.path.join(newDir, relPath)
-            patchPath = os.path.join(patchDir, 'files', relPath)
-            print_verbose(2, '    ' + oldPath)
+    for (relPath, oldPath, newPath, patchPath) in walk_dir(oldDir, oldDir, newDir, patchDir):
+        print_verbose(2, '    ' + oldPath)
 
-            if not os.path.exists(newPath):
-                add_to_index('D', relPath, indexPath)
-                continue
+        if not os.path.exists(newPath):
+            add_to_index('D', relPath, indexPath)
+            continue
 
-            if not filecmp.cmp(oldPath, newPath):
-                mkdir_if_not_exists(os.path.dirname(patchPath))
-                bsdiff(oldPath, newPath, patchPath)
-                chkOld = checksum(oldPath)
-                chkNew = checksum(newPath)
-                add_to_index('M', relPath, indexPath, chkOld, chkNew)
-                continue
+        if not filecmp.cmp(oldPath, newPath):
+            mkdir_if_not_exists(os.path.dirname(patchPath))
+            bsdiff(oldPath, newPath, patchPath)
+            chkOld = checksum(oldPath)
+            chkNew = checksum(newPath)
+            add_to_index('M', relPath, indexPath, chkOld, chkNew)
+            continue
 
 
 def walk_new_dir(oldDir, newDir, patchDir):
     print 'Checking for new files...'
     indexPath = os.path.join(patchDir, 'index')
-    for (dirpath, dirnames, filenames) in os.walk(newDir):
-        relDir = os.path.relpath(dirpath, newDir)
-        for filename in filenames:
-            relPath = os.path.join(relDir, filename)
-            oldPath = os.path.join(oldDir, relPath)
-            newPath = os.path.join(newDir, relPath)
-            patchPath = os.path.join(patchDir, 'files', relPath)
-            print_verbose(2, '    ' + relPath)
+    for (relPath, oldPath, newPath, patchPath) in walk_dir(newDir, oldDir, newDir, patchDir):
+        print_verbose(2, '    ' + relPath)
 
-            if not os.path.exists(oldPath):
-                patchDir = os.path.dirname(patchPath)
-                mkdir_if_not_exists(patchDir)
-                shutil.copy(newPath, patchDir)
-                add_to_index('A', relPath, indexPath)
+        if not os.path.exists(oldPath):
+            targetDir = os.path.dirname(patchPath)
+            mkdir_if_not_exists(targetDir)
+            shutil.copy(newPath, targetDir)
+            add_to_index('A', relPath, indexPath)
 
 
 def add_file(srcPath, dstPath):
@@ -156,6 +154,23 @@ def unzip_directory(zipPath, directory):
 def checksum(path):
     with open(path, 'r') as f:
         return zlib.adler32(f.read())
+
+class ChecksumException(Exception):
+    def __init__(self, path):
+        self.path = path
+
+    def msg(self):
+        return 'Cannot apply patch because file at ' + self.path + \
+            ' does not have the correct checksum. Please reinstall the full release.'
+
+
+def validate_checksum_pre(path, expectedChecksum):
+    if checksum(path) != expectedChecksum:
+        raise ChecksumException(path)
+
+def validate_checksum_post(path, expectedChecksum):
+    if checksum(path) != expectedChecksum:
+        print 'WARNING: File ' + path + ' is corrupted! Please reinstall the full release.'
 
 
 def validate_environment():
