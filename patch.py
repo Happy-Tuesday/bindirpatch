@@ -49,28 +49,41 @@ def apply_patch(patchFilePath, targetDir):
     baseDir = os.path.dirname(patchFilePath)
     patchDir = os.path.join(baseDir, 'patch_temp')
     if validate_environment():
-        unzip_directory(patchFilePath, os.path.dirname(patchDir))
-        index = read_index(patchDir)
-        for (operation, path, checksumOld, checksumNew) in index:
-            if (operation != 'A'):
-                validate_checksum_pre(os.path.join(targetDir, path), checksumOld)
-        for (operation, path) in index:
-            apply_file_operation(operation, path, patchDir, targetDir)
-        for (operation, path, checksumOld, checksumNew) in index:
-            if (operation != 'D'):
-                validate_checksum_post(os.path.join(targetDir, path), checksumNew)
+        try:
+            unzip_directory(patchFilePath, os.path.dirname(patchDir))
+            index = read_index(patchDir)
+
+            print 'Checking for correct version of files...'
+            for (operation, path, checksumOld, checksumNew) in index:
+                if (operation != 'A'):
+                    print_verbose(2, path)
+                    validate_checksum_pre(os.path.join(targetDir, path), checksumOld)
+
+            print 'Applying Patch...'
+            for (operation, path, checksumOld, checksumNew) in index:
+                print_verbose(1, operation + ' ' + path)
+                apply_file_operation(operation, path, patchDir, targetDir)
+
+            print 'Validating Result...'
+            for (operation, path, checksumOld, checksumNew) in index:
+                print_verbose(2, path)
+                if (operation != 'D'):
+                    validate_checksum_post(os.path.join(targetDir, path), checksumNew)
+
+        except ChecksumException as ex:
+            print ex.msg()
 
     shutil.rmtree(patchDir)
 
 
 def apply_file_operation(operation, relPath, patchDir, targetDir):
-    srcPath = os.path.join(patchDir, 'files', relPath)
     dstPath = os.path.join(targetDir, relPath)
-    
+    patchPath = os.path.join(patchDir, 'files', relPath)
+
     if operation == 'A':
-        add_file(srcPath, dstPath)
+        add_file(patchPath, dstPath)
     if operation == 'M':
-        modify_file(srcPath, dstPath)
+        modify_file(dstPath, patchPath)
     if operation == 'D':
         delete_file(dstPath)
 
@@ -101,15 +114,13 @@ def visit_old_file((relPath, oldPath, newPath, patchPath, indexPath)):
     print_verbose(2, '    ' + oldPath)
 
     if not os.path.exists(newPath):
-        add_to_index('D', relPath, indexPath)
+        add_to_index('D', relPath, indexPath, checksum(oldPath), 0)
         return
 
     if not filecmp.cmp(oldPath, newPath):
         mkdir_if_not_exists(os.path.dirname(patchPath))
         bsdiff(oldPath, newPath, patchPath)
-        chkOld = checksum(oldPath)
-        chkNew = checksum(newPath)
-        add_to_index('M', relPath, indexPath, chkOld, chkNew)
+        add_to_index('M', relPath, indexPath, checksum(oldPath), checksum(newPath))
         return
     
 
@@ -126,7 +137,7 @@ def visit_new_file(relPath, oldPath, newPath, patchPath, indexPath):
             targetDir = os.path.dirname(patchPath)
             mkdir_if_not_exists(targetDir)
             shutil.copy(newPath, targetDir)
-            add_to_index('A', relPath, indexPath)
+            add_to_index('A', relPath, indexPath, 0, checksum(newPath))
 
 
 def add_file(srcPath, dstPath):
@@ -136,7 +147,10 @@ def add_file(srcPath, dstPath):
     os.rename(srcPath, dstPath)
 
 def modify_file(filePath, patchFile):
-    bspatch(filePath, filePath, patchFile)
+    tmpFilePath = filePath + '.patch_tmp'
+    bspatch(filePath, tmpFilePath, patchFile)
+    os.remove(filePath)
+    os.rename(tmpFilePath, filePath)
 
 def delete_file(path):
     os.remove(path)
@@ -150,6 +164,7 @@ def bsdiff(oldFile, newFile, patchFile):
 def bspatch(oldFile, newFile, patchFile):
     """Applies the <patchFile> to the <oldFile> and writes the result to <newFile>"""
     global BSPATCH_EXE
+    print_verbose(2, BSPATCH_EXE + ' "' + oldFile + '" "' + newFile + '" "' + patchFile + '"')
     subprocess.call([BSPATCH_EXE, oldFile, newFile, patchFile])
 
 
@@ -182,11 +197,13 @@ def read_index(patchDir):
     with open(indexPath, 'r') as indexFile:
         result = []
         for line in indexFile.readlines():
-            parts = line.split(4)
+            if len(line) == 0:
+                continue
+            parts = line.split(' ', 3)
             operation = parts[0]
             checksumOld = int(parts[1])
             checksumNew = int(parts[2])
-            path = parts[3]
+            path = parts[3].strip()
             result.append( (operation, path, checksumOld, checksumNew) )
     return result
 
@@ -207,17 +224,21 @@ def checksum(path):
         return zlib.adler32(f.read())
 
 class ChecksumException(Exception):
-    def __init__(self, path):
+    def __init__(self, path, expected, actual):
         self.path = path
+        self.expected = expected
+        self.actual = actual
 
     def msg(self):
         return 'Cannot apply patch because file at ' + self.path + \
-            ' does not have the correct checksum. Please reinstall the full release.'
+            ' does not have the correct checksum' + \
+            ' (' + str(self.actual) + ' instead of ' + str(self.expected) + ').' + \
+            ' Please reinstall the full release.'
 
 
 def validate_checksum_pre(path, expectedChecksum):
     if checksum(path) != expectedChecksum:
-        raise ChecksumException(path)
+        raise ChecksumException(path, expectedChecksum, checksum(path))
 
 def validate_checksum_post(path, expectedChecksum):
     if checksum(path) != expectedChecksum:
