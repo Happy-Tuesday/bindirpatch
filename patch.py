@@ -5,12 +5,30 @@ import shutil
 import filecmp
 import subprocess
 import zlib
+import multiprocessing
+
+"""
+    Directory-wide diff and patch.
+    Patch files are 7z archives containing an index file and a files directory.
+    The index file has a list of modified files. Each entry consists of an operation
+    (A/M/D = Added/Modified/Deleted), the Adler32 checksums of the old and the new version
+    and the relative path to the file.
+    The files directory contains all added files and, for all modified files, the bsdiff
+    patches that can convert the old to the new version. The directory structure within
+    the files directory is the same as in the target directory.
+
+    Creating a patch can be multithreaded to make use of multiple cpu cores.
+    To avoid conflicts, each process writes to its own index file, they are merged at the end.
+
+    Requires the command-line version of 7zip and the Windows version of bsdiff/bspatch.
+"""
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 SEVENZIP_EXE = os.path.join(SCRIPT_DIR, '7zip', 'x64', '7za.exe')
 BSDIFF_EXE = os.path.join(SCRIPT_DIR, 'bsdiff', 'bsdiff.exe')
 BSPATCH_EXE = os.path.join(SCRIPT_DIR, 'bsdiff', 'bspatch.exe')
 VERBOSITY_LEVEL = 0
+NUM_WORKERS = 1
 
 def create_patch(oldDir, newDir, outDir):
     patchDir = os.path.join(outDir, 'patch_temp')
@@ -23,6 +41,7 @@ def create_patch(oldDir, newDir, outDir):
     if validate_environment():
         walk_old_dir(oldDir, newDir, patchDir)
         walk_new_dir(oldDir, newDir, patchDir)
+        merge_index(patchDir)
         zip_directory(patchDir, patchDir + '.7z')
 
 
@@ -57,6 +76,7 @@ def apply_file_operation(operation, relPath, patchDir, targetDir):
 
 
 def walk_dir(rootPath, oldDir, newDir, patchDir):
+    indexPath = os.path.join(patchDir, 'index')
     for (dirpath, dirnames, filenames) in os.walk(rootPath):
         relDir = os.path.relpath(dirpath, rootPath)
         for filename in filenames:
@@ -64,18 +84,20 @@ def walk_dir(rootPath, oldDir, newDir, patchDir):
             oldPath = os.path.join(oldDir, relPath)
             newPath = os.path.join(newDir, relPath)
             patchPath = os.path.join(patchDir, 'files', relPath)
-            yield (relPath, oldPath, newPath, patchPath)
+            yield (relPath, oldPath, newPath, patchPath, indexPath)
 
 
 def walk_old_dir(oldDir, newDir, patchDir):
+    """Traverse <oldDir> and index all files that are modified or deleted in <newDir>"""
     print ''
     print 'Checking Old Files in ' + oldDir
-    indexPath = os.path.join(patchDir, 'index')
-    for (relPath, oldPath, newPath, patchPath) in walk_dir(oldDir, oldDir, newDir, patchDir):
-        visit_old_file(relPath, oldPath, newPath, patchPath, indexPath)
+    if NUM_WORKERS > 1:
+        pool = multiprocessing.Pool(processes=NUM_WORKERS)
+        pool.map(visit_old_file, walk_dir(oldDir, oldDir, newDir, patchDir))
+    else:
+        map(visit_old_file, walk_dir(oldDir, oldDir, newDir, patchDir))
 
-
-def visit_old_file(relPath, oldPath, newPath, patchPath, indexPath):
+def visit_old_file((relPath, oldPath, newPath, patchPath, indexPath)):
     print_verbose(2, '    ' + oldPath)
 
     if not os.path.exists(newPath):
@@ -92,9 +114,9 @@ def visit_old_file(relPath, oldPath, newPath, patchPath, indexPath):
     
 
 def walk_new_dir(oldDir, newDir, patchDir):
+    """Traverse <newDir> and index all files as added that don't appear in <oldDir>"""
     print 'Checking for new files...'
-    indexPath = os.path.join(patchDir, 'index')
-    for (relPath, oldPath, newPath, patchPath) in walk_dir(newDir, oldDir, newDir, patchDir):
+    for (relPath, oldPath, newPath, patchPath, indexPath) in walk_dir(newDir, oldDir, newDir, patchDir):
         visit_new_file(relPath, oldPath, newPath, patchPath, indexPath)
 
 
@@ -121,21 +143,41 @@ def delete_file(path):
 
 
 def bsdiff(oldFile, newFile, patchFile):
+    """Creates a binary diff between <oldFile> and <newFile> and stores it in <patchFile>"""
     global BSDIFF_EXE
     subprocess.call([BSDIFF_EXE, oldFile, newFile, patchFile])
 
 def bspatch(oldFile, newFile, patchFile):
+    """Applies the <patchFile> to the <oldFile> and writes the result to <newFile>"""
     global BSPATCH_EXE
     subprocess.call([BSPATCH_EXE, oldFile, newFile, patchFile])
 
 
 def add_to_index(operation, path, indexPath, checksumOld=0, checksumNew=0):
+    """Adds an entry to the index. Each process has its own index file.
+        They must be merged with merge_index() after all processes are done."""
+    indexPath = indexPath + '.' + str(os.getpid())
     line = operation + ' ' + str(checksumOld) + ' ' + str(checksumNew) + ' ' + path
     print_verbose(1, line)
     with open(indexPath, 'a') as indexFile:
-        indexFile.write(line + '\n')
+        indexFile.write(unicode(line + '\n'))
+
+def merge_index(patchDir):
+    """Merges the index files of the separate worker processes into one."""
+    indexFiles = [ os.path.join(patchDir,f) \
+                       for f in os.listdir(patchDir) \
+                           if os.path.isfile(os.path.join(patchDir,f)) \
+                           and f.startswith('index.') ]
+    indexFile = os.path.join(patchDir, 'index')
+    with open(indexFile, 'w') as index:
+        for partialIndexFile in indexFiles:
+            with open(partialIndexFile, 'r') as partialIndex:
+                index.write(partialIndex.read())
+            os.remove(partialIndexFile)
 
 def read_index(patchDir):
+    """Read and parse the index file. Returns a list of
+        (operation, path, checksumOld, checksumNew) tuples"""
     indexPath = os.path.join(patchDir, 'index')
     with open(indexPath, 'r') as indexFile:
         result = []
@@ -150,10 +192,12 @@ def read_index(patchDir):
 
 
 def zip_directory(directory, zipPath):
+    """Creates a 7z archive at <zipPath> containing the files from <directory>."""
     global SEVENZIP_EXE
     subprocess.call([SEVENZIP_EXE, 'a', zipPath, directory, '-mx9', '-t7z'])
     
 def unzip_directory(zipPath, directory):
+    """Extracts the 7z archive <zipPath> and puts the content into directory <directory>"""
     global SEVENZIP_EXE
     subprocess.call([SEVENZIP_EXE, 'x', zipPath, '-o' + directory])
 
@@ -202,7 +246,11 @@ def validate_environment():
 
 def mkdir_if_not_exists(path):
     if not os.path.exists(path):
-        os.makedirs(path)
+        try:
+            os.makedirs(path)
+        except:
+            if not os.path.exists(path):
+                raise Exception("cannot create directory " + path)
         
 
 def is_empty_directory(path):
@@ -218,8 +266,9 @@ def print_verbose(verbosity, msg):
         print msg
 
 
-def parseExtraArgs(i):
+def _parseExtraArgs(i):
     global VERBOSITY_LEVEL
+    global NUM_WORKERS
     if i < len(sys.argv):
         if sys.argv[i] == '-v':            
             VERBOSITY_LEVEL = 1
@@ -227,16 +276,29 @@ def parseExtraArgs(i):
         elif sys.argv[i] == '-vv':
             VERBOSITY_LEVEL = 2
             print 'Verbosity Level ' + str(VERBOSITY_LEVEL)
+        elif sys.argv[i][0:2] == '-j':
+            NUM_WORKERS = int(sys.argv[i][2:])
+            print 'Workers: ' + str(NUM_WORKERS)
         else:
             print 'unrecognized argument ' + sys.argv[i]
             usage()
-        parseExtraArgs(i+1)
+        _parseExtraArgs(i+1)
+
+def parseExtraArgs(i):
+    _parseExtraArgs(i)
+    if VERBOSITY_LEVEL > 0 and NUM_WORKERS > 1:
+        print 'WARNING: There will be no verbose log output when using multiple workers.'
 
 def usage():
     print 'Wrong arguments. Usage:'
-    print '    patch.py diff <oldDir> <newDir> <outDir> [-v | -vv]'
+    print '    patch.py diff <oldDir> <newDir> <outDir> [switch args]'
     print 'or'
-    print '    patch.py patch <patchFile> <targetDir> [-v | -vv]'
+    print '    patch.py patch <patchFile> <targetDir> [switch args]'
+    print ''
+    print 'Switch Args: '
+    print '-v   Print more status messages'
+    print '-vv  Print a lot of status messages (only for debugging)'
+    print '-j#  Parallel processing. Replace # with the number of desired worker threads'
     sys.exit(1)
 
 if __name__ == '__main__':
