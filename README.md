@@ -13,9 +13,11 @@ This will create a patch that updates `<oldDir>` to the state in `<newDir>` and 
 Applies the `<patchFile>` to `<targetDir>`.
 
 ### Options
-`-v`    verbose - Print more status messages
-`-vv`   very verbose - Print a lot of status messages (only for debugging)
-`-j#`   jobs - Run multiple jobs in parallel. Replace `#` with number of desired worker processes.
+|         |                                                                                             |
+| ------- | ------------------------------------------------------------------------------------------- |
+| `-v`    | verbose - Print more status messages                                                        |
+| `-vv`   | very verbose - Print a lot of status messages (only for debugging)                          |
+| `-j#`   | jobs - Run multiple jobs in parallel. Replace `#` with number of desired worker processes.  |
 
 
 ## Known Issues
