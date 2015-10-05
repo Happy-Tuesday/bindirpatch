@@ -27,5 +27,4 @@ Applies the `<patchFile>` to `<targetDir>`.
 
 
 ## Dependencies
-### bsdiff / bspatch
 You need the [Windows version of bsdiff and bspatch](http://sites.inka.de/tesla/download/bsdiff4.3-win32.zip). You also need the [command-line version of 7zip](http://www.7-zip.org/a/7z1507-extra.7z). You may need to adjust the paths to the executables in the script.
