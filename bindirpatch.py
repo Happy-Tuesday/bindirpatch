@@ -312,9 +312,9 @@ def parseExtraArgs(i):
 
 def usage():
     print 'Wrong arguments. Usage:'
-    print '    patch.py diff <oldDir> <newDir> <outDir> [switch args]'
+    print '    bindirpatch.py diff <oldDir> <newDir> <outDir> [switch args]'
     print 'or'
-    print '    patch.py patch <patchFile> <targetDir> [switch args]'
+    print '    bindirpatch.py patch <patchFile> <targetDir> [switch args]'
     print ''
     print 'Switch Args: '
     print '-v   Print more status messages'
