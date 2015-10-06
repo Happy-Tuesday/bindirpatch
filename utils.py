@@ -1,10 +1,11 @@
 import os
 import subprocess
+import sys
 
-SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
-SEVENZIP_EXE = os.path.join(SCRIPT_DIR, '7zip', 'x64', '7za.exe')
-BSDIFF_EXE = os.path.join(SCRIPT_DIR, 'bsdiff', 'bsdiff.exe')
-BSPATCH_EXE = os.path.join(SCRIPT_DIR, 'bsdiff', 'bspatch.exe')
+#SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
+SEVENZIP_EXE = os.path.join('.', '7zip', 'x64', '7za.exe')
+BSDIFF_EXE = os.path.join('.', 'bsdiff', 'bsdiff.exe')
+BSPATCH_EXE = os.path.join('.', 'bsdiff', 'bspatch.exe')
 
 
 def bsdiff(oldFile, newFile, patchFile):
@@ -39,3 +40,37 @@ def find_application_version(projectDir):
     except IOError:
         print 'Could not open VERSION file at ' + versionFilePath
         return None
+
+
+class Progress:
+    def __init__(self, total, dots):
+        self.total = total
+        self.current = 0
+        self.dotsPrinted = 0
+        self.dotsMax = dots
+
+    def print_header(self, numSegments=1):
+        sys.stdout.write('[')
+        dotsPerSegment = self.dotsMax / numSegments
+        for i in range(0, self.dotsMax):
+            if (i+1) % dotsPerSegment == 0:
+                sys.stdout.write('|')
+            else:
+                sys.stdout.write(' ')
+        sys.stdout.write(']\n ')
+        
+    def set_progress(self, progress):
+        if progress <= self.current:
+            return
+
+        self.current = progress
+        percentage = progress / float(self.total)
+        nextDotPercentage = (self.dotsPrinted + 1) / float(self.dotsMax)
+        if percentage >= nextDotPercentage:
+            sys.stdout.write('.')
+            self.dotsPrinted += 1
+        if self.current >= self.total:
+            print ''
+            
+    def add_progress(self, progress):
+        self.set_progress(self.current + progress)

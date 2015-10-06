@@ -4,7 +4,7 @@ import shutil
 from ftplib import FTP
 
 import bindirpatch
-from utils import find_application_version, zip_directory
+from utils import find_application_version, zip_directory, Progress
 
 OLD_DIR = None
 NEW_DIR = None
@@ -16,10 +16,10 @@ UPDATE_SERVER_PWD = None
 UPDATE_SERVER_PATH = None
 
 def deploy():
-    #increment_version()
-    #clear_temp_dir()
-    #create_patch()
-    #zip_full_game()
+    increment_version()
+    clear_temp_dir()
+    create_patch()
+    zip_full_game()
     upload()
 
 def increment_version():
@@ -45,8 +45,17 @@ def create_patch():
 
 def zip_full_game():
     print 'zipping game'
+    binDir = os.path.join(TEMP_DIR, 'bin')
+    if os.path.exists(binDir):
+        print 'WARNING: Replacing directory ', binDir
+        shutil.rmtree(binDir)
     outFile = os.path.join(OUT_DIR, 'latest.7z')
-    zip_directory(NEW_DIR, outFile)
+    if os.path.exists(outFile):
+        print 'WARNING: Replacing archive ', outFile
+        os.remove(outFile)
+    os.rename(NEW_DIR, binDir)
+    zip_directory(binDir, outFile)
+    os.rename(binDir, NEW_DIR)
 
 def upload():
     print 'Connecting to Server...'
@@ -57,15 +66,19 @@ def upload():
 
     print 'Uploading full game...'
     fullGamePath = os.path.join(OUT_DIR, 'latest.7z')
-    #with open(fullGamePath, 'rb') as f:
-        #ftp.storbinary('STOR latest', f)
+    progress = Progress(os.stat(fullGamePath).st_size, 50)
+    progress.print_header(10)
+    with open(fullGamePath, 'rb') as f:
+        ftp.storbinary('STOR latest', f, blocksize=8192, callback = lambda x: progress.add_progress(8192))
 
     print 'Uploading patch...'
     version = find_application_version(NEW_DIR)
     patchPath = os.path.join(OUT_DIR, 'patches', 'v' + str(version))
+    progress = Progress(os.stat(patchPath).st_size, 50)
+    progress.print_header(10)
     with open(patchPath, 'rb') as f:
         ftp.cwd('patches')
-        ftp.storbinary('STOR v' + str(version), f)
+        ftp.storbinary('STOR v' + str(version), f, blocksize=8192, callback = lambda x: progress.add_progress(8192))
 
     ftp.quit()
     print 'Upload Complete'

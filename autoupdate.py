@@ -3,7 +3,7 @@ import shutil
 import sys
 import os
 from ftplib import FTP
-from utils import unzip_directory, find_application_version
+from utils import unzip_directory, find_application_version, Progress
 
 """
     Ensures that the latest version of an application is installed.
@@ -127,11 +127,11 @@ def find_full_game_size(ftp):
 def download_full_game(ftp):
     fileSize = find_full_game_size(ftp)
     print 'Downloading full application (' + str(fileSize / 1000000) + ' MB)...'
-    #clear_temp_dir()
+    clear_temp_dir()
     progress = Progress(fileSize, 50)
     progress.print_header(10)
     filename = os.path.join(TEMP_DIR, 'latest')
-    #download_file(ftp, 'latest', filename, progress)
+    download_file(ftp, 'latest', filename, progress)
     print 'Extracting files...'
     unzip_directory(filename, TEMP_DIR)
     if os.path.exists(PROJECT_DIR):
@@ -149,40 +149,6 @@ def download_file(ftp, remoteFileName, outFileName, progress):
             progress.add_progress(len(block))
         ftp.retrbinary('RETR ' + remoteFileName, write_downloaded_block)
 
-
-class Progress:
-    def __init__(self, total, dots):
-        self.total = total
-        self.current = 0
-        self.dotsPrinted = 0
-        self.dotsMax = dots
-
-    def print_header(self, numSegments=1):
-        sys.stdout.write('[')
-        dotsPerSegment = self.dotsMax / numSegments
-        for i in range(0, self.dotsMax):
-            if (i+1) % dotsPerSegment == 0:
-                sys.stdout.write('|')
-            else:
-                sys.stdout.write(' ')
-        sys.stdout.write(']\n ')
-        
-    def set_progress(self, progress):
-        if progress <= self.current:
-            return
-
-        self.current = progress
-        percentage = progress / float(self.total)
-        nextDotPercentage = (self.dotsPrinted + 1) / float(self.dotsMax)
-        if percentage >= nextDotPercentage:
-            sys.stdout.write('.')
-            self.dotsPrinted += 1
-        if self.current >= self.total:
-            print ''
-            
-    def add_progress(self, progress):
-        self.set_progress(self.current + progress)
-        
 
 def parseExtraArgs(i):
     global UPDATE_SERVER_USER, UPDATE_SERVER_PWD, UPDATE_SERVER_PATH
