@@ -81,7 +81,7 @@ Similarly, if the installed version is so far behind that downloading the patche
 | serverUrl  | url of the ftp server                      |
 
 ### Options 
-|         |                                                                       |
-| ------- | --------------------------------------------------------------------- |
-| `-aU:P` | Authentication, Username:Password, ex: -aexampleuser:examplepassword  |
-| `pPath` | path on the ftp server where the files are stored                     |
+|          |                                                                        |
+| -------- | ---------------------------------------------------------------------- |
+| `-aU:P`  | Authentication, Username:Password, ex: `-aexampleuser:examplepassword` |
+| `-pPath` | path on the ftp server where the files are stored                      |
