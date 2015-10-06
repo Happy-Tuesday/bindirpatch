@@ -4,7 +4,11 @@ This is a collection of tools for managing application updates. It consists of t
  - **deploy**: Creates a patch, manages version numbers and uploads to an FTP server 
  - **autoupdate**: Checks FTP server for new version and installs updates 
 
-The bindirpatch tool works standalone and has no dependencies to the other scripts (except for utils.py). The deploy and autoupdate scripts are meant to be used together. They require an FTP server that should have two user accounts, one with read-only access and one with write access. The server will always have the latest version of the application, along with a history of patches that can be used to update previous versions. 
+The bindirpatch tool works standalone and has no dependencies to the other scripts (except for utils.py and the external tools). The deploy and autoupdate scripts are meant to be used together. They require an FTP server that should have two user accounts, one with read-only access and one with write access. The server will always have the latest version of the application, along with a history of patches that can be used to update previous versions. 
+
+## Dependencies
+You need the [Windows version of bsdiff and bspatch](http://sites.inka.de/tesla/download/bsdiff4.3-win32.zip). You also need the [command-line version of 7zip](http://www.7-zip.org/a/7z1507-extra.7z). You may need to adjust the paths to the executables in the utils.py script.
+
 
 # bindirpatch
 This Python script creates or applies a binary diff between two directories. This is useful for creating application update patches. Internally, it uses bsdiff/bspatch on each file that was modified. It uses an index file to keep track of which files were added / modified / deleted. The result is compressed with 7zip.
@@ -33,9 +37,6 @@ Applies the `<patchFile>` to `<targetDir>`.
  * Multiprocessing is not supported for the the `patch` command, only for `diff`.
  * Only works on Windows for now
 
-
-## Dependencies
-You need the [Windows version of bsdiff and bspatch](http://sites.inka.de/tesla/download/bsdiff4.3-win32.zip). You also need the [command-line version of 7zip](http://www.7-zip.org/a/7z1507-extra.7z). You may need to adjust the paths to the executables in the script.
 
 
 # deploy 
