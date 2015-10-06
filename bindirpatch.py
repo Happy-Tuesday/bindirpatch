@@ -3,9 +3,10 @@ import os
 import sys
 import shutil
 import filecmp
-import subprocess
 import zlib
 import multiprocessing
+from utils import BSDIFF_EXE, BSPATCH_EXE, SEVENZIP_EXE
+from utils import bsdiff, bspatch, zip_directory, unzip_directory
 
 """
     Directory-wide diff and patch.
@@ -23,10 +24,6 @@ import multiprocessing
     Requires the command-line version of 7zip and the Windows version of bsdiff/bspatch.
 """
 
-SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
-SEVENZIP_EXE = os.path.join(SCRIPT_DIR, '7zip', 'x64', '7za.exe')
-BSDIFF_EXE = os.path.join(SCRIPT_DIR, 'bsdiff', 'bsdiff.exe')
-BSPATCH_EXE = os.path.join(SCRIPT_DIR, 'bsdiff', 'bspatch.exe')
 VERBOSITY_LEVEL = 0
 NUM_WORKERS = 1
 
@@ -36,13 +33,14 @@ def create_patch(oldDir, newDir, outDir):
         os.mkdir(patchDir)
     elif not is_empty_directory(patchDir):
         print 'patch_temp directory is not empty! Aborting.'
-        return False
+        return None
     
     if validate_environment():
         walk_old_dir(oldDir, newDir, patchDir)
         walk_new_dir(oldDir, newDir, patchDir)
         merge_index(patchDir)
         zip_directory(patchDir, patchDir + '.7z')
+        return patchDir + '.7z'
 
 
 def apply_patch(patchFilePath, targetDir):
@@ -50,7 +48,9 @@ def apply_patch(patchFilePath, targetDir):
     patchDir = os.path.join(baseDir, 'patch_temp')
     if validate_environment():
         try:
-            unzip_directory(patchFilePath, os.path.dirname(patchDir))
+            print patchFilePath
+            print baseDir
+            unzip_directory(patchFilePath, baseDir)
             index = read_index(patchDir)
 
             print 'Checking for correct version of files...'
@@ -156,18 +156,6 @@ def delete_file(path):
     os.remove(path)
 
 
-def bsdiff(oldFile, newFile, patchFile):
-    """Creates a binary diff between <oldFile> and <newFile> and stores it in <patchFile>"""
-    global BSDIFF_EXE
-    subprocess.call([BSDIFF_EXE, oldFile, newFile, patchFile])
-
-def bspatch(oldFile, newFile, patchFile):
-    """Applies the <patchFile> to the <oldFile> and writes the result to <newFile>"""
-    global BSPATCH_EXE
-    print_verbose(2, BSPATCH_EXE + ' "' + oldFile + '" "' + newFile + '" "' + patchFile + '"')
-    subprocess.call([BSPATCH_EXE, oldFile, newFile, patchFile])
-
-
 def add_to_index(operation, path, indexPath, checksumOld=0, checksumNew=0):
     """Adds an entry to the index. Each process has its own index file.
         They must be merged with merge_index() after all processes are done."""
@@ -207,16 +195,6 @@ def read_index(patchDir):
             result.append( (operation, path, checksumOld, checksumNew) )
     return result
 
-
-def zip_directory(directory, zipPath):
-    """Creates a 7z archive at <zipPath> containing the files from <directory>."""
-    global SEVENZIP_EXE
-    subprocess.call([SEVENZIP_EXE, 'a', zipPath, directory, '-mx9', '-t7z'])
-    
-def unzip_directory(zipPath, directory):
-    """Extracts the 7z archive <zipPath> and puts the content into directory <directory>"""
-    global SEVENZIP_EXE
-    subprocess.call([SEVENZIP_EXE, 'x', zipPath, '-o' + directory])
 
 
 def checksum(path):
