@@ -150,7 +150,7 @@ def download_file(ftp, remoteFileName, outFileName, progress):
         def write_downloaded_block(block):
             outFile.write(block)
             progress.add_progress(len(block))
-        ftp.retrbinary('RETR ' + remoteFileName, write_downloaded_block)
+        ftp.retrbinary('RETR ' + remoteFileName, write_downloaded_block, 102400)
 
 
 def parseExtraArgs(i):
