@@ -9,6 +9,16 @@ The bindirpatch tool works standalone and has no dependencies to the other scrip
 ## Dependencies
 You need the [Windows version of bsdiff and bspatch](http://sites.inka.de/tesla/download/bsdiff4.3-win32.zip). You also need the [command-line version of 7zip](http://www.7-zip.org/a/7z1507-extra.7z). You may need to adjust the paths to the executables in the utils.py script.
 
+## How To Use
+ * Setup an FTP server with two users: One with write privileges, another with read only access.
+ * In your current application release, at the root directory, create a file named VERSION that contains the number 1. This release version number is incremented automatically by the patch tools whenever to deploy a new release of your application.
+ * Make some changes in your application and build a new release. Do not overwrite the old release.
+ * Run deploy.py, passing in the old and new release, as well as the url and write-access login data for your FTP server.
+ * Create a python script / batch file / exe that runs autoupdate.py with the correct path and the read-only login data for your FTP server and hand that out to your users.
+ 
+You can use [PyInstaller](http://www.pyinstaller.org/) to create a standalone executable from the autoupdate script. This way, your users will not need a Python installation.
+
+It is recommended that you create a launcher GUI application that runs the autoupdate script and then launches the application. 
 
 # bindirpatch
 This Python script creates or applies a binary diff between two directories. This is useful for creating application update patches. Internally, it uses bsdiff/bspatch on each file that was modified. It uses an index file to keep track of which files were added / modified / deleted. The result is compressed with 7zip.
