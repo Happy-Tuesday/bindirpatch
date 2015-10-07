@@ -48,9 +48,7 @@ def apply_patch(patchFilePath, targetDir):
     patchDir = os.path.join(baseDir, 'patch_temp')
     if validate_environment():
         try:
-            print patchFilePath
-            print baseDir
-            unzip_directory(patchFilePath, baseDir)
+            unzip_directory(patchFilePath, baseDir, silent=True)
             index = read_index(patchDir)
 
             print 'Checking for correct version of files...'

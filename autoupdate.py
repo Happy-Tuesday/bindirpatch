@@ -52,7 +52,7 @@ def update_application():
     fullGameBytes = find_full_game_size(ftp)
     if numPatchBytes > fullGameBytes:
         print 'Too far behind'
-        download_full_game()
+        download_full_game(ftp)
         return
 
     download_patches(ftp, patches, numPatchBytes)
@@ -101,6 +101,7 @@ def find_available_patches(ftp):
 
 def download_patches(ftp, patches, numPatchBytes):
     print 'Downloading ' + str(len(patches)) + ' Patches (' + str(numPatchBytes / 1000000) + ' MB)'
+    clear_temp_dir()
     progress = Progress(numPatchBytes, 50)
     progress.print_header(10)
 
@@ -118,6 +119,7 @@ def install_patches(patches):
         print 'Installing patch ' + patch
         patchFilePath = os.path.join(TEMP_DIR, patch)
         bindirpatch.apply_patch(patchFilePath, PROJECT_DIR)
+    shutil.rmtree(TEMP_DIR)
     
 
 def find_full_game_size(ftp):
@@ -138,7 +140,8 @@ def download_full_game(ftp):
         print 'Deleting old files...'
         shutil.rmtree(PROJECT_DIR)
     print 'Copying new files...'
-    os.rename(TEMP_DIR, PROJECT_DIR)
+    os.rename(os.path.join(TEMP_DIR, 'bin'), PROJECT_DIR)
+    shutil.rmtree(TEMP_DIR)
     print 'Done.'
 
 

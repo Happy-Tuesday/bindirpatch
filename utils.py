@@ -8,22 +8,29 @@ BSDIFF_EXE = os.path.join('.', 'bsdiff', 'bsdiff.exe')
 BSPATCH_EXE = os.path.join('.', 'bsdiff', 'bspatch.exe')
 
 
-def bsdiff(oldFile, newFile, patchFile):
+def get_stdout(silent):
+    if silent:
+        return open(os.devnull, 'wb')
+    else:
+        return None
+
+
+def bsdiff(oldFile, newFile, patchFile, silent=False):
     """Creates a binary diff between <oldFile> and <newFile> and stores it in <patchFile>"""
-    subprocess.call([BSDIFF_EXE, oldFile, newFile, patchFile])
+    subprocess.call([BSDIFF_EXE, oldFile, newFile, patchFile], stdout=get_stdout(silent))
 
-def bspatch(oldFile, newFile, patchFile):
+def bspatch(oldFile, newFile, patchFile, silent=False):
     """Applies the <patchFile> to the <oldFile> and writes the result to <newFile>"""
-    subprocess.call([BSPATCH_EXE, oldFile, newFile, patchFile])
+    subprocess.call([BSPATCH_EXE, oldFile, newFile, patchFile], stdout=get_stdout(silent))
 
 
-def zip_directory(directory, zipPath):
+def zip_directory(directory, zipPath, silent=False):
     """Creates a 7z archive at <zipPath> containing the files from <directory>."""
-    subprocess.call([SEVENZIP_EXE, 'a', zipPath, directory, '-mx9', '-t7z'])
+    subprocess.call([SEVENZIP_EXE, 'a', zipPath, directory, '-mx9', '-t7z'], stdout=get_stdout(silent))
     
-def unzip_directory(zipPath, directory):
+def unzip_directory(zipPath, directory, silent=False):
     """Extracts the 7z archive <zipPath> and puts the content into directory <directory>"""
-    subprocess.call([SEVENZIP_EXE, 'x', zipPath, '-o' + directory])
+    subprocess.call([SEVENZIP_EXE, 'x', zipPath, '-o' + directory], stdout=get_stdout(silent))
 
 
 def find_application_version(projectDir):
