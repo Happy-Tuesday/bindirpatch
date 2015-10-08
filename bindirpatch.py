@@ -55,6 +55,11 @@ def create_patch(oldDir, newDir, outDir):
 
 
 def apply_patch(patchFilePath, targetDir):
+    if not os.path.isfile(patchFilePath) or not patchFilePath.endswith(".7z"):
+        print 'Invalid patch file path at: ' + patchFilePath
+        print 'Must exist and be of type .7z'
+        return None
+    
     baseDir = os.path.dirname(patchFilePath)
     patchDir = os.path.join(baseDir, 'patch_temp')
     if validate_environment():
