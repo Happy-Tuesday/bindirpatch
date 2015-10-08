@@ -29,18 +29,29 @@ NUM_WORKERS = 1
 
 def create_patch(oldDir, newDir, outDir):
     patchDir = os.path.join(outDir, 'patch_temp')
+    
+    if not os.path.exists(oldDir):
+        print 'Directory to the old version is invalid! Aborting.'
+        return None
+    
+    if not os.path.exists(newDir):
+        print 'Directory to the new version is invalid! Aborting.'
+        return None
+    
+    if not validate_environment():
+        return None
+    
     if not os.path.exists(patchDir):
         os.mkdir(patchDir)
     elif not is_empty_directory(patchDir):
         print 'patch_temp directory is not empty! Aborting.'
         return None
     
-    if validate_environment():
-        walk_old_dir(oldDir, newDir, patchDir)
-        walk_new_dir(oldDir, newDir, patchDir)
-        merge_index(patchDir)
-        zip_directory(patchDir, patchDir + '.7z')
-        return patchDir + '.7z'
+    walk_old_dir(oldDir, newDir, patchDir)
+    walk_new_dir(oldDir, newDir, patchDir)
+    merge_index(patchDir)
+    zip_directory(patchDir, patchDir + '.7z')
+    return patchDir + '.7z'
 
 
 def apply_patch(patchFilePath, targetDir):
@@ -86,22 +97,11 @@ def apply_file_operation(operation, relPath, patchDir, targetDir):
         delete_file(dstPath)
 
 
-def walk_dir(rootPath, oldDir, newDir, patchDir):
-    indexPath = os.path.join(patchDir, 'index')
-    for (dirpath, dirnames, filenames) in os.walk(rootPath):
-        relDir = os.path.relpath(dirpath, rootPath)
-        for filename in filenames:
-            relPath = os.path.join(relDir, filename)
-            oldPath = os.path.join(oldDir, relPath)
-            newPath = os.path.join(newDir, relPath)
-            patchPath = os.path.join(patchDir, 'files', relPath)
-            yield (relPath, oldPath, newPath, patchPath, indexPath)
-
-
 def walk_old_dir(oldDir, newDir, patchDir):
     """Traverse <oldDir> and index all files that are modified or deleted in <newDir>"""
     print ''
-    print 'Checking Old Files in ' + oldDir
+    print 'Checking for deleted or modified files..'
+    global NUM_WORKERS
     if NUM_WORKERS > 1:
         pool = multiprocessing.Pool(processes=NUM_WORKERS)
         pool.map(visit_old_file, walk_dir(oldDir, oldDir, newDir, patchDir))
@@ -120,7 +120,7 @@ def visit_old_file((relPath, oldPath, newPath, patchPath, indexPath)):
         bsdiff(oldPath, newPath, patchPath)
         add_to_index('M', relPath, indexPath, checksum(oldPath), checksum(newPath))
         return
-    
+
 
 def walk_new_dir(oldDir, newDir, patchDir):
     """Traverse <newDir> and index all files as added that don't appear in <oldDir>"""
@@ -138,20 +138,34 @@ def visit_new_file(relPath, oldPath, newPath, patchPath, indexPath):
             add_to_index('A', relPath, indexPath, 0, checksum(newPath))
 
 
+def walk_dir(rootPath, oldDir, newDir, patchDir):
+    indexPath = os.path.join(patchDir, 'index')
+    for (dirpath, dirnames, filenames) in os.walk(rootPath):
+        relDir = os.path.relpath(dirpath, rootPath)
+        for filename in filenames:
+            relPath = os.path.join(relDir, filename)
+            oldPath = os.path.join(oldDir, relPath)
+            newPath = os.path.join(newDir, relPath)
+            patchPath = os.path.join(patchDir, 'files', relPath)
+            yield (relPath, oldPath, newPath, patchPath, indexPath)
+
+
 def add_file(srcPath, dstPath):
+    """Adds file from patch."""
     dstDir = os.path.dirname(dstPath)
     if not os.path.exists(dstDir):
         os.makedirs(dstDir)
     os.rename(srcPath, dstPath)
 
 def modify_file(filePath, patchFile):
+    """Applies diff from patch to file."""
     tmpFilePath = filePath + '.patch_tmp'
     bspatch(filePath, tmpFilePath, patchFile)
     os.remove(filePath)
     os.rename(tmpFilePath, filePath)
 
-def delete_file(path):
-    os.remove(path)
+def delete_file(filePath):
+    os.remove(filePath)
 
 
 def add_to_index(operation, path, indexPath, checksumOld=0, checksumNew=0):
@@ -194,6 +208,13 @@ def read_index(patchDir):
     return result
 
 
+def validate_checksum_pre(path, expectedChecksum):
+    if checksum(path) != expectedChecksum:
+        raise ChecksumException(path, expectedChecksum, checksum(path))
+
+def validate_checksum_post(path, expectedChecksum):
+    if checksum(path) != expectedChecksum:
+        print 'WARNING: File ' + path + ' is corrupted! Please reinstall the full release.'
 
 def checksum(path):
     with open(path, 'r') as f:
@@ -212,29 +233,20 @@ class ChecksumException(Exception):
             ' Please reinstall the full release.'
 
 
-def validate_checksum_pre(path, expectedChecksum):
-    if checksum(path) != expectedChecksum:
-        raise ChecksumException(path, expectedChecksum, checksum(path))
-
-def validate_checksum_post(path, expectedChecksum):
-    if checksum(path) != expectedChecksum:
-        print 'WARNING: File ' + path + ' is corrupted! Please reinstall the full release.'
-
-
 def validate_environment():
     global BSDIFF_EXE
     global BSPATCH_EXE
     global SEVENZIP_EXE
     if not os.path.exists(BSDIFF_EXE):
-        print "Couldn't find bsdiff"
+        print "Couldn't find bsdiff at path: " + BSDIFF_EXE
         print "Please download from http://sites.inka.de/tesla/download/bsdiff4.3-win32.zip"
         return False
     if not os.path.exists(BSPATCH_EXE):
-        print "Couldn't find bspatch"
+        print "Couldn't find bspatch at path: " + BSPATCH_EXE
         print "Please download from http://sites.inka.de/tesla/download/bsdiff4.3-win32.zip"
         return False
     if not os.path.exists(SEVENZIP_EXE):
-        print "Couldn't find 7zip"
+        print "Couldn't find 7zip at path: " + SEVENZIP_EXE
         print "Please download from http://www.7-zip.org/a/7z1507-extra.7z"
         return False
     
@@ -248,7 +260,6 @@ def mkdir_if_not_exists(path):
         except:
             if not os.path.exists(path):
                 raise Exception("cannot create directory " + path)
-        
 
 def is_empty_directory(path):
     if not os.path.isdir(path):
@@ -259,9 +270,17 @@ def is_empty_directory(path):
 
 
 def print_verbose(verbosity, msg):
+    global VERBOSITY_LEVEL
     if verbosity <= VERBOSITY_LEVEL:
         print msg
 
+
+def parseExtraArgs(i):
+    global VERBOSITY_LEVEL
+    global NUM_WORKERS
+    _parseExtraArgs(i)
+    if VERBOSITY_LEVEL > 0 and NUM_WORKERS > 1:
+        print 'WARNING: There will be no verbose log output when using multiple workers.'
 
 def _parseExtraArgs(i):
     global VERBOSITY_LEVEL
@@ -280,11 +299,6 @@ def _parseExtraArgs(i):
             print 'unrecognized argument ' + sys.argv[i]
             usage()
         _parseExtraArgs(i+1)
-
-def parseExtraArgs(i):
-    _parseExtraArgs(i)
-    if VERBOSITY_LEVEL > 0 and NUM_WORKERS > 1:
-        print 'WARNING: There will be no verbose log output when using multiple workers.'
 
 def usage():
     print 'Wrong arguments. Usage:'
@@ -321,3 +335,4 @@ if __name__ == '__main__':
         apply_patch(patchFile, targetDir)
     else:
         usage()
+
