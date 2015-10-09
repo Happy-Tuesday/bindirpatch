@@ -106,7 +106,6 @@ def walk_old_dir(oldDir, newDir, patchDir):
     """Traverse <oldDir> and index all files that are modified or deleted in <newDir>"""
     print ''
     print 'Checking for deleted or modified files..'
-    global NUM_WORKERS
     if NUM_WORKERS > 1:
         pool = multiprocessing.Pool(processes=NUM_WORKERS)
         pool.map(visit_old_file, walk_dir(oldDir, oldDir, newDir, patchDir))
@@ -239,9 +238,6 @@ class ChecksumException(Exception):
 
 
 def validate_environment():
-    global BSDIFF_EXE
-    global BSPATCH_EXE
-    global SEVENZIP_EXE
     if not os.path.exists(BSDIFF_EXE):
         print "Couldn't find bsdiff at path: " + BSDIFF_EXE
         print "Please download from http://sites.inka.de/tesla/download/bsdiff4.3-win32.zip"
@@ -275,14 +271,11 @@ def is_empty_directory(path):
 
 
 def print_verbose(verbosity, msg):
-    global VERBOSITY_LEVEL
     if verbosity <= VERBOSITY_LEVEL:
         print msg
 
 
 def parseExtraArgs(i):
-    global VERBOSITY_LEVEL
-    global NUM_WORKERS
     _parseExtraArgs(i)
     if VERBOSITY_LEVEL > 0 and NUM_WORKERS > 1:
         print 'WARNING: There will be no verbose log output when using multiple workers.'
