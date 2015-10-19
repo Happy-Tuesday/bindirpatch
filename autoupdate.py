@@ -25,6 +25,7 @@ UPDATE_SERVER_URL = ''
 UPDATE_SERVER_USER = 'anonymous'
 UPDATE_SERVER_PWD = 'anonymous'
 UPDATE_SERVER_PATH = '/'
+PATCH_NOTES = None
 
 class AutoUpdateException(Exception):
     def __init__(self, arg):
@@ -37,6 +38,10 @@ class ConnectionError(AutoUpdateException):
 
 def update_application():
     ftp = ftp_connect()
+
+    if PATCH_NOTES != None:
+        download_patch_notes(ftp)
+        show_patch_notes()
     
     currentVersion = find_current_version()
     if currentVersion == None:
@@ -153,8 +158,17 @@ def download_file(ftp, remoteFileName, outFileName, progress):
         ftp.retrbinary('RETR ' + remoteFileName, write_downloaded_block, 102400)
 
 
+def download_patch_notes(ftp):
+    with open(PATCH_NOTES, 'wb') as patchNotesFile:
+        ftp.retrbinary('RETR ' + PATCH_NOTES, patchNotesFile.write)
+
+
+def show_patch_notes():
+    os.startfile(PATCH_NOTES)
+    
+
 def parseExtraArgs(i):
-    global UPDATE_SERVER_USER, UPDATE_SERVER_PWD, UPDATE_SERVER_PATH
+    global UPDATE_SERVER_USER, UPDATE_SERVER_PWD, UPDATE_SERVER_PATH, PATCH_NOTES
     if len(sys.argv) <= i:
         return
     arg = sys.argv[i]
@@ -166,6 +180,8 @@ def parseExtraArgs(i):
         UPDATE_SERVER_PATH = arg[2:]
         if not UPDATE_SERVER_PATH.startswith('/'):
             UPDATE_SERVER_PATH = '/' + UPDATE_SERVER_PATH
+    elif arg.startswith('--patchnotes='):
+        PATCH_NOTES = arg.split('=', 1)[1]
     else:
         print 'Invalid argument: ' + sys.argv[i]
         usage()
